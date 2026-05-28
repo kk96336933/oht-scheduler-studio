@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OHT-EDD 天車排程模擬大師 | 半導體晶圓廠調度決策系統</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- Sidebar / Settings -->
+    <aside class="glass-panel">
+      <div class="logo-container">
+        <div class="logo-icon">⚡</div>
+        <div class="logo-title">
+          <h1>EDD 排程大師</h1>
+          <p>OHT Scheduler Studio</p>
+        </div>
+      </div>
+      
+      <hr style="border: 0; border-top: 1px solid var(--border-glass); margin: 8px 0 16px 0;">
+      
+      <div class="form-group">
+        <label for="machine-count">天車數量 (OHT Machines)</label>
+        <input type="number" id="machine-count" class="input-control" min="1" max="10" value="2">
+      </div>
+      
+      <div class="preset-section">
+        <label>作業預設題目一鍵載入</label>
+        <div class="preset-list">
+          <button class="preset-btn" onclick="loadPreset(1)">
+            <span class="preset-title">📘 作業一 (EDD1)</span>
+            <span class="preset-desc">2台天車 (OHT1, OHT2) / 6個任務批次</span>
+          </button>
+          <button class="preset-btn" onclick="loadPreset(2)">
+            <span class="preset-title">📙 作業二 (EDD2)</span>
+            <span class="preset-desc">3台天車 (OHT1~3) / 10個任務批次</span>
+          </button>
+          <button class="preset-btn" onclick="loadPreset(3)">
+            <span class="preset-title">📗 作業三 (EDD3)</span>
+            <span class="preset-desc">2台天車 (OHT1, OHT2) / 6個任務批次</span>
+          </button>
+        </div>
+      </div>
+      
+      <div class="preset-section" style="margin-top: 16px;">
+        <label>排程規則切換</label>
+        <div class="preset-list">
+          <a href="spt.html" class="preset-btn" style="text-decoration: none; align-items: center; justify-content: center; background: rgba(16, 185, 129, 0.1); border-color: var(--accent-emerald); flex-direction: row; gap: 8px;">
+            <span class="preset-title" style="color: var(--accent-emerald); font-weight: bold;">🎯 切換至 SPT 最短處理時間</span>
+          </a>
+        </div>
+      </div>
+      <div class="btn-group" style="flex-direction: column; gap: 12px; margin-top: 24px;">
+        <button class="btn btn-run-glowing" id="btn-run" style="width: 100%;">
+          🚀 開始天車調度計算
+        </button>
+        <button class="btn btn-secondary" id="btn-clear" style="width: 100%; padding: 10px 16px;">
+          🧹 清空所有數據
+        </button>
+        <button class="btn btn-secondary" id="btn-export" style="width: 100%; padding: 10px 16px;">
+          📥 轉出 Excel 報表
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main>
+      
+      <!-- Top Input Panels (Grid) -->
+      <div class="input-grid">
+        
+        <!-- Table Editor Panel -->
+        <section class="glass-panel table-panel">
+          <div class="table-header-row">
+            <h2><span class="accent-bar"></span>天車任務批次列表 (Lot List)</h2>
+            <button class="btn btn-secondary btn-icon-only" onclick="addJobRow()" title="新增一個 Lot 批次">+</button>
+          </div>
+          
+          <div class="table-wrapper">
+            <table id="jobs-table">
+              <thead>
+                <tr>
+                  <th style="width: 80px;">Lot ID</th>
+                  <th>可開始時間 (Release)</th>
+                  <th>搬運時間 (Duration)</th>
+                  <th>需求到達時間 (Due)</th>
+                  <th style="width: 60px; text-align: center;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="jobs-tbody">
+                <!-- Rows injected dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+        
+        <!-- Dropzone / Paste Area Tabbed Panel -->
+        <section class="glass-panel dropzone-container">
+          <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchInputTab('tab-ocr')">📷 圖片辨識求 EDD</button>
+            <button class="tab-btn" onclick="switchInputTab('tab-excel')">📋 貼上 Excel / 數據</button>
+            <button class="tab-btn" onclick="switchInputTab('tab-manual')">✍️ 表格填寫數值</button>
+          </div>
+          
+          <!-- Image OCR Tab -->
+          <div id="tab-ocr" class="tab-content active">
+            <div class="dropzone" id="drop-zone">
+              <div class="dropzone-icon">📷</div>
+              <div class="dropzone-text">
+                <h3>將作業表格圖片拖曳到此處</h3>
+                <p>支援 PNG, JPG, JPEG 格式，系統會自動辨識欄位</p>
+              </div>
+              <input type="file" id="file-input" style="display: none;" accept="image/*">
+            </div>
+            
+            <!-- OCR Loading State -->
+            <div class="ocr-loader" id="ocr-loading" style="display: none;">
+              <span class="animate-pulse" style="font-size: 13px; font-weight: 500; color: var(--accent-cyan);">
+                ⚡ 正在分析圖片中...
+              </span>
+              <div class="progress-bar-container">
+                <div class="progress-bar" id="ocr-progress"></div>
+              </div>
+              <span id="ocr-status-text" style="font-size: 11px; color: var(--text-muted);">正在初始化 OCR 引擎...</span>
+            </div>
+          </div>
+          
+          <!-- Excel Paste Tab -->
+          <div id="tab-excel" class="tab-content">
+            <textarea class="paste-area" id="paste-input" placeholder="可直接在此處貼上從 Word / Excel 複製的欄位數據...&#10;例如：&#10;L1  0   8   10&#10;L2  0   7   9"></textarea>
+            <div class="btn-group" style="justify-content: flex-end; margin-top: 8px;">
+              <button class="btn btn-secondary" onclick="parsePastedData()">🧩 解析數據</button>
+            </div>
+          </div>
+
+          <!-- Manual Form Tab -->
+          <div id="tab-manual" class="tab-content">
+            <div class="table-wrapper" style="max-height: 180px; margin-bottom: 8px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Lot ID</th>
+                    <th>可開始 (Release)</th>
+                    <th>搬運 (Duration)</th>
+                    <th>需求 (Due)</th>
+                    <th style="width: 45px; text-align: center;">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="manual-input-tbody">
+                  <!-- Dynamic rows generated here -->
+                </tbody>
+              </table>
+            </div>
+            <div class="btn-group" style="justify-content: space-between; align-items: center; margin-top: 12px;">
+              <button class="btn btn-secondary" onclick="addManualStagingRow()" style="padding: 8px 14px; font-size: 13px; border-radius: 8px;">
+                ➕ 新增一列
+              </button>
+              <div class="btn-group" style="margin-top: 0; gap: 8px;">
+                <button class="btn btn-secondary" onclick="clearManualStaging()" style="padding: 8px 14px; font-size: 13px; border-radius: 8px;">
+                  🧹 清空
+                </button>
+                <button class="btn btn-primary" onclick="confirmManualImport()" style="padding: 8px 14px; font-size: 13px; border-radius: 8px;">
+                  ✔️ 導入主排程
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        
+      </div>
+      
+      <!-- KPI Metric Panel -->
+      <section class="glass-panel kpi-grid" id="kpi-panel" style="display: none;">
+        <div class="kpi-card" style="--card-accent: var(--accent-purple);">
+          <span class="kpi-label">總完成時間 (Makespan)</span>
+          <span class="kpi-value" id="kpi-makespan">-</span>
+          <span class="kpi-subtext">所有任務全部運送完畢的時間</span>
+        </div>
+        <div class="kpi-card" style="--card-accent: var(--accent-rose);">
+          <span class="kpi-label">平均延遲 (Avg Tardiness)</span>
+          <span class="kpi-value" id="kpi-avg-tardiness">-</span>
+          <span class="kpi-subtext">全部批次平均延遲時間長度</span>
+        </div>
+        <div class="kpi-card" style="--card-accent: var(--accent-amber);">
+          <span class="kpi-label">最大延遲 (Max Tardiness)</span>
+          <span class="kpi-value" id="kpi-max-tardiness">-</span>
+          <span class="kpi-subtext">單一批次中最嚴重的延遲</span>
+        </div>
+        <div class="kpi-card" style="--card-accent: var(--accent-emerald);">
+          <span class="kpi-label">天車平均利用率</span>
+          <span class="kpi-value" id="kpi-utilization">-</span>
+          <span class="kpi-subtext">OHT 在搬運狀態下的時間比例</span>
+        </div>
+        <div class="kpi-card" style="--card-accent: var(--accent-cyan);">
+          <span class="kpi-label">準時交付率 (OTD Rate)</span>
+          <span class="kpi-value" id="kpi-otd">-</span>
+          <span class="kpi-subtext">完全沒有延遲的批次比例</span>
+        </div>
+      </section>
+      
+      <!-- Results Visualized & Educational Panel (Tabbed Dashboard) -->
+      <section class="glass-panel" id="results-panel" style="display: none; margin-top: 24px;">
+        <div class="tab-nav" style="margin-bottom: 20px; border-bottom: 1px solid var(--border-glass);">
+          <button class="tab-btn active" id="btn-tab-gantt" onclick="switchResultTab('tab-gantt')">📊 天車派工甘特圖 (Gantt Chart)</button>
+          <button class="tab-btn" id="btn-tab-table" onclick="switchResultTab('tab-table')">📋 最終排程對照表 (Schedule Table)</button>
+          <button class="tab-btn" id="btn-tab-logs" onclick="switchResultTab('tab-logs')">🖥️ 決策軌跡日誌 (Trace Logs)</button>
+        </div>
+        
+        <!-- Tab 1: Gantt Chart Pane -->
+        <div id="tab-gantt" class="tab-content active">
+          <div class="gantt-chart-container" style="border: none; background: transparent; padding: 0; margin-top: 0;">
+            <svg id="gantt-svg" class="gantt-svg" width="100%" height="220"></svg>
+          </div>
+          
+          <!-- Horizontal Sequence Flow inside Gantt tab -->
+          <h3 style="margin-top: 28px; margin-bottom: 12px; font-size: 15px; color: var(--accent-cyan); font-weight: 600; display: flex; align-items: center; gap: 6px;">
+            <span>🔗</span> 派工順序流程鏈 (Dispatch Sequence Chain)
+          </h3>
+          <div id="sequence-flow-container" style="display: flex; gap: 10px; overflow-x: auto; padding: 12px 4px; align-items: center; border-radius: 8px;">
+            <!-- Stepper badges injected here -->
+          </div>
+        </div>
+        
+        <!-- Tab 2: Schedule Table Pane -->
+        <div id="tab-table" class="tab-content">
+          <div class="table-wrapper" style="max-height: 380px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 70px; text-align: center;">順序</th>
+                  <th>Lot ID</th>
+                  <th>指派天車 (OHT)</th>
+                  <th>開始時間 (起)</th>
+                  <th>結束時間 (訖)</th>
+                  <th>需求交期 (Due)</th>
+                  <th>延遲時間 (Tardiness)</th>
+                  <th>狀態</th>
+                </tr>
+              </thead>
+              <tbody id="results-tbody">
+                <!-- Result rows injected here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <!-- Tab 3: Trace Logs Pane -->
+        <div id="tab-logs" class="tab-content">
+          <div class="console-wrapper" id="console-logs" style="max-height: 380px; overflow-y: auto; border: none; background: #060913;">
+            <!-- Step logs injected here -->
+          </div>
+        </div>
+      </section>
+      
+    </main>
+  </div>
+
+  <!-- Gantt chart Hover Tooltip -->
+  <div class="gantt-tooltip" id="gantt-tooltip"></div>
+
+  <!-- Modal Dialog: OCR Staging & Verification -->
+  <div class="modal-overlay" id="modal-ocr-verify">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>⚡ 晶圓天車任務圖片辨識結果核對</h2>
+        <button class="close-modal" onclick="closeOcrModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px;">
+          <p class="modal-info-text" style="margin: 0; max-width: 70%;">
+            以下是 AI 辨識出的排程數據。為了防止 OCR 因為圖片反光或字體模糊產生誤判，請核對並修正以下參數值，然後點選「導入並執行排程計算」。
+          </p>
+          <button class="btn btn-secondary" onclick="addOcrStagingRow()" style="padding: 8px 14px; font-size: 13px; white-space: nowrap; border-radius: 8px;">
+            ➕ 新增 Lot 批次
+          </button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Lot ID</th>
+                <th>可開始時間 (Release)</th>
+                <th>搬運時間 (Duration)</th>
+                <th>需求到達時間 (Due)</th>
+                <th style="width: 60px; text-align: center;">保留</th>
+              </tr>
+            </thead>
+            <tbody id="ocr-verify-tbody">
+              <!-- OCR rows generated here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeOcrModal()">取消</button>
+        <button class="btn btn-primary" onclick="confirmOcrImport()">✔️ 導入並執行排程</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load client-side Tesseract.js OCR library -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
