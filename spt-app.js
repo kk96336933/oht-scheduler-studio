@@ -116,6 +116,36 @@ function loadPreset(presetNum) {
   runScheduling();
 }
 
+// Generate random floating-point problem for robustness testing
+function generateRandomTest() {
+  const jobCount = Math.floor(Math.random() * 6) + 5; // 5 to 10 jobs
+  const machines = Math.floor(Math.random() * 3) + 2; // 2 to 4 machines
+  
+  machineCountInput.value = machines;
+  
+  const generatedJobs = [];
+  for (let i = 1; i <= jobCount; i++) {
+    // Generate release time (0 to 8, with 0.5 steps)
+    const release = Math.floor(Math.random() * 17) * 0.5;
+    // Generate duration (1 to 10, with 0.5 steps)
+    const duration = Math.floor(Math.random() * 19 + 2) * 0.5;
+    // Generate slack/buffer (1 to 8, with 0.5 steps)
+    const slack = Math.floor(Math.random() * 15 + 2) * 0.5;
+    const due = parseFloat((release + duration + slack).toFixed(1));
+    
+    generatedJobs.push({
+      id: `L${i}`,
+      release: release,
+      duration: duration,
+      due: due
+    });
+  }
+  
+  jobs = generatedJobs;
+  renderJobsTable();
+  runScheduling();
+}
+
 // Render the main table editor
 function renderJobsTable() {
   jobsTbody.innerHTML = '';
@@ -134,9 +164,9 @@ function renderJobsTable() {
     tr.className = urgencyClass;
     tr.innerHTML = `
       <td><input type="text" class="table-input" value="${job.id}" style="font-weight:600; color:var(--accent-cyan);" onchange="updateJobField(${index}, 'id', this.value)"></td>
-      <td><input type="number" class="table-input" value="${job.release}" min="0" onchange="updateJobField(${index}, 'release', parseInt(this.value) || 0)"></td>
-      <td><input type="number" class="table-input" value="${job.duration}" min="1" onchange="updateJobField(${index}, 'duration', parseInt(this.value) || 1)"></td>
-      <td><input type="number" class="table-input" value="${job.due}" min="0" onchange="updateJobField(${index}, 'due', parseInt(this.value) || 0)"></td>
+      <td><input type="number" step="any" class="table-input" value="${job.release}" min="0" onchange="updateJobField(${index}, 'release', parseFloat(this.value) || 0)"></td>
+      <td><input type="number" step="any" class="table-input" value="${job.duration}" min="1" onchange="updateJobField(${index}, 'duration', parseFloat(this.value) || 1)"></td>
+      <td><input type="number" step="any" class="table-input" value="${job.due}" min="0" onchange="updateJobField(${index}, 'due', parseFloat(this.value) || 0)"></td>
       <td style="text-align: center;">
         <button class="btn btn-danger btn-icon-only" onclick="deleteJobRow(${index})" title="刪除此批次">×</button>
       </td>
@@ -241,9 +271,9 @@ function renderManualStagingTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><span style="font-weight:600; color:var(--accent-cyan);">${job.id}</span></td>
-      <td><input type="number" class="table-input" value="${job.release}" min="0" onchange="updateManualStagingField(${index}, 'release', parseInt(this.value) || 0)"></td>
-      <td><input type="number" class="table-input" value="${job.duration}" min="1" onchange="updateManualStagingField(${index}, 'duration', parseInt(this.value) || 1)"></td>
-      <td><input type="number" class="table-input" value="${job.due}" min="0" onchange="updateManualStagingField(${index}, 'due', parseInt(this.value) || 0)"></td>
+      <td><input type="number" step="any" class="table-input" value="${job.release}" min="0" onchange="updateManualStagingField(${index}, 'release', parseFloat(this.value) || 0)"></td>
+      <td><input type="number" step="any" class="table-input" value="${job.duration}" min="1" onchange="updateManualStagingField(${index}, 'duration', parseFloat(this.value) || 1)"></td>
+      <td><input type="number" step="any" class="table-input" value="${job.due}" min="0" onchange="updateManualStagingField(${index}, 'due', parseFloat(this.value) || 0)"></td>
       <td style="text-align: center;">
         <button class="btn btn-danger btn-icon-only" onclick="deleteManualStagingRow(${index})" title="刪除" style="width:22px; height:22px; font-size:11px;">×</button>
       </td>
@@ -447,22 +477,22 @@ function parsePastedData() {
       }
     }
     
-    // 2. Extract all valid integers from columns
-    let integers = [];
+    // 2. Extract all valid numbers from columns (decimals or integers)
+    let numbers = [];
     columns.forEach(col => {
       let colClean = col.trim();
-      // Check if the column is a pure number
-      if (/^\d+$/.test(colClean)) {
-        integers.push(parseInt(colClean));
+      // Check if the column is a valid number
+      if (/^\d+(?:\.\d+)?$/.test(colClean)) {
+        numbers.push(parseFloat(colClean));
       }
     });
     
-    // If we have at least 3 integers, the last three represent Release, Duration, Due
-    if (integers.length >= 3) {
-      const len = integers.length;
-      let release = integers[len - 3];
-      let duration = integers[len - 2];
-      let due = integers[len - 1];
+    // If we have at least 3 numbers, the last three represent Release, Duration, Due
+    if (numbers.length >= 3) {
+      const len = numbers.length;
+      let release = numbers[len - 3];
+      let duration = numbers[len - 2];
+      let due = numbers[len - 1];
       
       if (!lotId) {
         lotId = `L${parsedJobs.length + 1}`;
@@ -535,8 +565,8 @@ function parseOcrText(text) {
     const cleanedLine = line.trim();
     if (!cleanedLine) return;
     
-    // Find sequence of numbers in the line
-    const numbers = cleanedLine.match(/\d+/g);
+    // Find sequence of numbers in the line (decimals or integers)
+    const numbers = cleanedLine.match(/\d+(?:\.\d+)?/g);
     if (!numbers) return;
     
     // Look for Lot indicators like "L1", "L-2", "Lot 2", etc. (Prioritize L/Lot over T/Task)
@@ -556,9 +586,9 @@ function parseOcrText(text) {
     // If we have at least 3 numbers on the line, the last three represent Release, Duration, Due
     if (numbers.length >= 3) {
       const len = numbers.length;
-      const release = parseInt(numbers[len-3]);
-      const duration = parseInt(numbers[len-2]);
-      const due = parseInt(numbers[len-1]);
+      const release = parseFloat(numbers[len-3]);
+      const duration = parseFloat(numbers[len-2]);
+      const due = parseFloat(numbers[len-1]);
       
       if (!lotName) {
         lotName = `L${ocrStagingJobs.length + 1}`;
@@ -598,9 +628,9 @@ function renderOcrStagingTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" class="table-input" value="${job.id}" style="font-weight:600; color:var(--accent-cyan);" onchange="updateOcrStagingField(${index}, 'id', this.value)"></td>
-      <td><input type="number" class="table-input" value="${job.release}" min="0" onchange="updateOcrStagingField(${index}, 'release', parseInt(this.value) || 0)"></td>
-      <td><input type="number" class="table-input" value="${job.duration}" min="1" onchange="updateOcrStagingField(${index}, 'duration', parseInt(this.value) || 1)"></td>
-      <td><input type="number" class="table-input" value="${job.due}" min="0" onchange="updateOcrStagingField(${index}, 'due', parseInt(this.value) || 0)"></td>
+      <td><input type="number" step="any" class="table-input" value="${job.release}" min="0" onchange="updateOcrStagingField(${index}, 'release', parseFloat(this.value) || 0)"></td>
+      <td><input type="number" step="any" class="table-input" value="${job.duration}" min="1" onchange="updateOcrStagingField(${index}, 'duration', parseFloat(this.value) || 1)"></td>
+      <td><input type="number" step="any" class="table-input" value="${job.due}" min="0" onchange="updateOcrStagingField(${index}, 'due', parseFloat(this.value) || 0)"></td>
       <td style="text-align: center;">
         <input type="checkbox" ${job.keep ? 'checked' : ''} onchange="updateOcrStagingField(${index}, 'keep', this.checked)">
       </td>
